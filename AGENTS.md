@@ -200,7 +200,7 @@ Translate assignment requirements into repository architecture.
 
 ## Owned Components
 
-COMP-001 through COMP-010
+COMP-001 through COMP-009
 
 ---
 
@@ -982,8 +982,7 @@ Notebook existence is preparation evidence only. Experiment completion requires 
 | COMP-006 | Evaluation Engine | ROLE-006 | ROLE-007 |
 | COMP-007 | Visualization | ROLE-006 | ROLE-008 |
 | COMP-008 | Reporting | ROLE-008 | ROLE-006 |
-| COMP-009 | Configuration | ROLE-009 | All Roles |
-| COMP-010 | Utilities | ROLE-004 | All Roles |
+| COMP-009 | Infrastructure Services | ROLE-004 | ROLE-009, All Roles |
 
 Ownership conflicts are prohibited.
 

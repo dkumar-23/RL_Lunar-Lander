@@ -34,7 +34,7 @@ No implementation should contradict these documents.
 | Software architecture and design | Documented; implementation completion not asserted here |
 | AI agent instructions and coding standards | Documented |
 | Experiment and evaluation specifications | Documented; execution completion not evidenced here |
-| Controlled Colab training notebook | Not present at this revision; preparation pending |
+| Controlled Colab training notebook | Prepared; no training completion implied |
 | EXP-001 through EXP-004 | Not complete without transferred, validated Colab artifact bundles |
 | Evaluation results and report findings | Not available without validated training artifacts |
 | Risk register | Documented |
@@ -258,13 +258,10 @@ COMP-008 Reporting Layer
 
 Responsible for report generation.
 
-COMP-009 Configuration Layer
+COMP-009 Infrastructure Services
 
-Responsible for centralized configuration.
-
-COMP-010 Utilities Layer
-
-Responsible for reusable utilities.
+Responsible for centralized configuration, logging, checkpoint lifecycle,
+artifact validation, serialization, seed management, and reusable utilities.
 
 ---
 
