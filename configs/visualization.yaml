@@ -1,0 +1,11 @@
+validated_root: outputs/colab/validated
+validation_root: outputs/colab/validation
+output_root: outputs/plots
+formats:
+  - png
+  - pdf
+  - svg
+dpi: 180
+width_inches: 9.0
+height_inches: 5.5
+moving_window: 100
