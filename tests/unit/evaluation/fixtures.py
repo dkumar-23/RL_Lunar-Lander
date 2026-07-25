@@ -29,6 +29,7 @@ def create_validated_bundle(
     experiment_id: str = "EXP-001",
     algorithm: str = "DQN",
     variant: str = "original",
+    learning_rate: float = 0.001,
 ) -> BundleFixture:
     """Create a hash-consistent bundle without running or simulating training."""
     validated_root = root / "outputs" / "colab" / "validated"
@@ -52,7 +53,7 @@ def create_validated_bundle(
         "  hidden_sizes: [8]\n"
         "  activation: relu\n"
         "  optimizer: adam\n"
-        "  learning_rate: 0.001\n"
+        f"  learning_rate: {learning_rate}\n"
         "  discount_factor: 0.99\n"
         "  replay_capacity: 10\n"
         "  batch_size: 2\n"
