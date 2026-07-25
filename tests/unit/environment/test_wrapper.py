@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from src.common.configuration import resolve_configuration
-from src.environment import EnvironmentConfig, ModifiedLunarLander
+from src.environment import EnvironmentConfig, ModifiedLunarLander, is_safe_landing
 
 from .fakes import FakeLanderEnv
 
@@ -114,6 +114,17 @@ def test_safe_terminal_landing_adds_bonus_and_selected_fuel_penalty() -> None:
     assert reward == pytest.approx(59.7)
     assert wrapper.landing_bonus_count == 1
     assert info is base.info
+
+
+def test_safe_landing_predicate_returns_python_bool() -> None:
+    observation = np.array(
+        [0.0, 0.0, 0.09, -0.09, 0.09, 0.0, 1.0, 1.0],
+        dtype=np.float32,
+    )
+
+    result = is_safe_landing(observation, True, False, 0.10)
+
+    assert result is True
 
 
 @pytest.mark.parametrize(

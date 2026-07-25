@@ -30,7 +30,7 @@ def is_safe_landing(
     """
     if len(observation) < 8:
         raise ValueError("LunarLander observation must contain eight values.")
-    return (
+    return bool(
         terminated
         and not truncated
         and observation[6] == 1
