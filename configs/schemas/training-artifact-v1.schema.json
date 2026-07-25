@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "training-artifact-v1.schema.json",
+  "title": "Training Artifact Manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "experiment_id",
+    "run_id",
+    "algorithm",
+    "environment_variant",
+    "repository_url",
+    "requested_git_commit",
+    "resolved_git_commit",
+    "git_worktree_clean",
+    "configuration_path",
+    "configuration_hash",
+    "random_seed",
+    "execution_platform",
+    "started_at_utc",
+    "completed_at_utc",
+    "duration_seconds",
+    "status",
+    "best_checkpoint_selection_metric",
+    "software_versions_path",
+    "artifacts",
+    "artifact_set_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "experiment_id": {"pattern": "^EXP-[0-9]{3}$"},
+    "run_id": {"pattern": "^RUN-[0-9]{3}$"},
+    "algorithm": {"enum": ["DQN", "DDQN"]},
+    "environment_variant": {"enum": ["original", "modified"]},
+    "execution_platform": {"const": "google-colab"},
+    "status": {"const": "COMPLETED"},
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "role", "size_bytes", "sha256"]
+      }
+    }
+  }
+}

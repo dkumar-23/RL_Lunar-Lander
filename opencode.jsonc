@@ -1,0 +1,120 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "instructions": [
+    "AGENTS.md",
+    "CONTEXT.md",
+    "AI_INSTRUCTIONS.md",
+    "COMMAND_PERMISSIONS.md",
+    "CODING_STANDARDS.md"
+  ],
+
+  "share": "disabled",
+
+  "snapshot": true,
+
+  "watcher": {
+    "ignore": [
+      ".git/**",
+      ".venv/**",
+      "node_modules/**",
+      "outputs/**",
+      "experiments/**/checkpoints/**",
+      "experiments/**/artifacts/**",
+      "reports/generated/**"
+    ]
+  },
+  "permission": {
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+
+    "edit": "ask",
+    "write": "ask",
+
+    "bash": {
+      "*": "ask",
+
+      "pwd": "allow",
+      "ls *": "allow",
+      "find *": "allow",
+      "tree *": "allow",
+      "cat *": "allow",
+      "head *": "allow",
+      "tail *": "allow",
+      "rg *": "allow",
+      "grep *": "allow",
+
+      "git status": "allow",
+      "git diff *": "allow",
+      "git log *": "allow",
+
+      "python --version": "allow",
+      "python3 --version": "allow",
+      "pytest *": "allow",
+      "python -m pytest *": "allow",
+      "python3 -m pytest *": "allow",
+
+      "python scripts/validate_config.py *": "allow",
+      "python3 scripts/validate_config.py *": "allow",
+      "python scripts/run_smoke_test.py *": "allow",
+      "python3 scripts/run_smoke_test.py *": "allow",
+      "python scripts/validate_one_step.py *": "allow",
+      "python3 scripts/validate_one_step.py *": "allow",
+      "python scripts/validate_training_artifacts.py *": "allow",
+      "python3 scripts/validate_training_artifacts.py *": "allow",
+      "python scripts/evaluate.py *": "ask",
+      "python3 scripts/evaluate.py *": "ask",
+      "python scripts/generate_plots.py *": "ask",
+      "python3 scripts/generate_plots.py *": "ask",
+      "python scripts/generate_report.py *": "ask",
+      "python3 scripts/generate_report.py *": "ask",
+      "python -m scripts.validate_config *": "allow",
+      "python3 -m scripts.validate_config *": "allow",
+      "python -m scripts.run_smoke_test *": "allow",
+      "python3 -m scripts.run_smoke_test *": "allow",
+      "python -m scripts.validate_one_step *": "allow",
+      "python3 -m scripts.validate_one_step *": "allow",
+      "python -m scripts.validate_training_artifacts *": "allow",
+      "python3 -m scripts.validate_training_artifacts *": "allow",
+      "python -m scripts.evaluate *": "ask",
+      "python3 -m scripts.evaluate *": "ask",
+      "python -m scripts.generate_plots *": "ask",
+      "python3 -m scripts.generate_plots *": "ask",
+      "python -m scripts.generate_report *": "ask",
+      "python3 -m scripts.generate_report *": "ask",
+
+      "git add *": "ask",
+      "git commit *": "ask",
+      "git push *": "ask",
+
+      "pip install *": "ask",
+      "docker *": "ask",
+      "curl *": "ask",
+      "wget *": "ask",
+      "ssh *": "ask",
+
+      "sudo *": "deny",
+      "rm -rf *": "deny",
+      "git reset --hard *": "deny",
+      "git clean *": "deny",
+      "docker system prune *": "deny",
+      "python scripts/train.py *": "deny",
+      "python3 scripts/train.py *": "deny",
+      "python -m src.training *": "deny",
+      "python3 -m src.training *": "deny",
+      "python scripts/experiment.py *": "deny",
+      "python3 scripts/experiment.py *": "deny",
+      "python -m scripts.train *": "deny",
+      "python3 -m scripts.train *": "deny",
+      "python -m scripts.experiment *": "deny",
+      "python3 -m scripts.experiment *": "deny",
+      "pytest *full_training*": "deny",
+      "python -m pytest *full_training*": "deny",
+      "python3 -m pytest *full_training*": "deny",
+      "jupyter *train_colab.ipynb*": "deny",
+      "papermill *train_colab.ipynb*": "deny"
+    }
+  }
+}
