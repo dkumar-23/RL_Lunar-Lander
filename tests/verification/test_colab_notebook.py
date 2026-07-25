@@ -38,6 +38,9 @@ class ColabNotebookTests(unittest.TestCase):
         self.assertIn("drive.mount", self.source)
         self.assertIn("/content/drive", self.source)
         self.assertIn("colab-full", self.source)
+        self.assertIn("torch.cuda.is_available", self.source)
+        self.assertIn("MINIMUM_FREE_DRIVE_BYTES", self.source)
+        self.assertIn('"-m", "pip", "check"', self.source)
 
     def test_notebook_clones_approved_repository(self) -> None:
         self.assertIn("https://github.com/dkumar-23/RL_Lunar-Lander", self.source)

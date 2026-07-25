@@ -48,6 +48,8 @@ class LocalLimits:
 
     max_environment_steps: int
     max_optimization_steps: int
+    max_episodes: int = 1
+    max_duration_seconds: float = 60.0
 
 
 @dataclass(frozen=True)
@@ -166,6 +168,8 @@ class TrainingEngine:
             raise RuntimeError("A TrainingEngine instance can run only once.")
         step_limit: int | None = None
         optimization_limit: int | None = None
+        episode_limit: int | None = None
+        duration_limit: float | None = None
         if self.execution_context is ExecutionContext.LOCAL_TEST:
             if local_limits is None:
                 raise ExecutionBoundaryError(
@@ -174,9 +178,13 @@ class TrainingEngine:
             validate_local_test_limits(
                 local_limits.max_environment_steps,
                 local_limits.max_optimization_steps,
+                local_limits.max_episodes,
+                local_limits.max_duration_seconds,
             )
             step_limit = local_limits.max_environment_steps
             optimization_limit = local_limits.max_optimization_steps
+            episode_limit = local_limits.max_episodes
+            duration_limit = local_limits.max_duration_seconds
         elif local_limits is not None:
             raise ValueError("Local limits cannot be supplied to full training.")
         elif self.colab_attestation is None:
@@ -187,7 +195,12 @@ class TrainingEngine:
         self._has_run = True
         self.initialize()
         try:
-            return self._execute(step_limit, optimization_limit)
+            return self._execute(
+                step_limit,
+                optimization_limit,
+                episode_limit,
+                duration_limit,
+            )
         finally:
             self.finalize()
 
@@ -195,16 +208,26 @@ class TrainingEngine:
         self,
         step_limit: int | None,
         optimization_limit: int | None,
+        episode_limit: int | None,
+        duration_limit: float | None,
     ) -> TrainingResult:
         """Execute the validated episode range and collect in-memory metrics."""
         optimization_rows: list[OptimizationMetrics] = []
         episode_rows: list[EpisodeMetrics] = []
         best_reward = float("-inf")
+        deadline = (
+            time.monotonic() + duration_limit if duration_limit is not None else None
+        )
         for episode in range(self.start_episode, self.config.episodes + 1):
             if step_limit is not None and self._global_steps >= step_limit:
                 break
+            if episode_limit is not None and len(episode_rows) >= episode_limit:
+                break
             episode_row, losses = self.train_episode(
-                episode, step_limit, optimization_limit
+                episode,
+                step_limit,
+                optimization_limit,
+                deadline,
             )
             episode_rows.append(episode_row)
             mean_loss = sum(losses) / len(losses) if losses else None
@@ -252,6 +275,7 @@ class TrainingEngine:
         episode: int,
         global_step_limit: int | None = None,
         optimization_limit: int | None = None,
+        deadline: float | None = None,
     ) -> tuple[EpisodeMetrics, tuple[float, ...]]:
         """Execute one episode with configured replay and optimization schedules."""
         started = time.monotonic()
@@ -268,12 +292,17 @@ class TrainingEngine:
         final_observation = state
 
         for episode_step in range(1, self.config.max_steps_per_episode + 1):
+            if deadline is not None and time.monotonic() >= deadline:
+                raise ExecutionBoundaryError(
+                    "Local validation exceeded its wall-clock limit."
+                )
             action = self.agent.select_action(state, explore=True)
             if action != 0:
                 selected_thrusters += 1
             next_observation, reward, terminated, truncated, _ = self.environment.step(
                 action
             )
+            self._check_deadline(deadline)
             self._global_steps += 1
             reached_episode_limit = episode_step == self.config.max_steps_per_episode
             reached_global_limit = (
@@ -303,6 +332,7 @@ class TrainingEngine:
                 losses.append(
                     self.agent.learn(self.replay_buffer.sample(self.config.batch_size))
                 )
+                self._check_deadline(deadline)
             state = next_state
             if terminated or truncated:
                 break
@@ -316,6 +346,7 @@ class TrainingEngine:
             self.environment_config.landing_tolerance,
         )
         predicted_q = mean_max_predicted_q(self.agent, self.validation_set)
+        self._check_deadline(deadline)
         return (
             EpisodeMetrics(
                 episode=episode,
@@ -366,3 +397,11 @@ class TrainingEngine:
             len(self.replay_buffer) >= self.config.warmup_steps
             and self._global_steps % self.config.optimization_frequency == 0
         )
+
+    @staticmethod
+    def _check_deadline(deadline: float | None) -> None:
+        """Fail a local invocation once an operation exceeds its deadline."""
+        if deadline is not None and time.monotonic() >= deadline:
+            raise ExecutionBoundaryError(
+                "Local validation exceeded its wall-clock limit."
+            )

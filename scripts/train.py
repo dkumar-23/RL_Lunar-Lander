@@ -18,6 +18,7 @@ from src.training import (
     create_replay_buffer,
     environment_dimensions,
     load_experiment_config,
+    validate_registered_configuration,
 )
 from src.training.bundle import ColabBundleWriter, utc_now
 
@@ -38,6 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--seed", required=True, type=int)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--minimum-free-drive-bytes", required=True, type=int)
     return parser.parse_args()
 
 
@@ -50,7 +52,10 @@ def main() -> int:
 
     # CON-011 attestation intentionally precedes configuration or ML construction.
     attestation = attest_colab_full_training(
-        repository, args.expected_commit, drive_root
+        repository,
+        args.expected_commit,
+        drive_root,
+        args.minimum_free_drive_bytes,
     )
     if _RUN_PATTERN.fullmatch(args.run_id) is None:
         raise ValueError("run-id must match RUN-NNN.")
@@ -68,7 +73,10 @@ def main() -> int:
             raise ValueError("CLI experiment-id differs from the selected definition.")
         if experiment.training.random_seed != args.seed:
             raise ValueError("CLI seed differs from the canonical training seed.")
-        config_relative = args.config.resolve().relative_to(repository).as_posix()
+        configuration_hash = validate_registered_configuration(
+            experiment,
+            repository,
+        )
         rng = initialize_seed(
             args.seed, deterministic=experiment.training.deterministic
         )
@@ -93,7 +101,7 @@ def main() -> int:
             args.run_id,
             _REPOSITORY_URL,
             args.expected_commit,
-            config_relative,
+            configuration_hash,
             agent,
             validation_set,
             attestation,

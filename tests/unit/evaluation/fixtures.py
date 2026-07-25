@@ -6,12 +6,18 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+import torch
+from torch import nn
+
 from src.common import (
+    RunMetadata,
     TrainingArtifactValidator,
     artifact_set_sha256,
     configuration_sha256,
     file_sha256,
+    save_checkpoint,
 )
+from src.models import QNetwork
 
 
 @dataclass(frozen=True)
@@ -38,6 +44,9 @@ def create_validated_bundle(
     (bundle / "checkpoints").mkdir(parents=True)
     (bundle / "status").mkdir()
     resolved_config = (
+        f"experiment_id: {experiment_id}\n"
+        f"algorithm: {algorithm}\n"
+        f"environment_variant: {variant}\n"
         "environment:\n"
         "  environment_name: LunarLander-v3\n"
         "  random_seed: 7\n"
@@ -68,14 +77,16 @@ def create_validated_bundle(
         "  checkpoint_interval: 1\n"
         "  success_window: 100\n"
         "  loss_function: smooth_l1\n"
-        "  device: cpu\n"
+        "  device: cuda\n"
         "  deterministic: true\n"
     )
     payloads = {
         "resolved_config.yaml": resolved_config,
         "metrics.csv": (
             "global_step,episode,optimization_step,loss,mean_predicted_q,"
-            "epsilon,learning_rate,replay_size\n1,1,1,0.5,0.1,1.0,0.001,1\n"
+            "epsilon,learning_rate,replay_size\n"
+            "2,1,1,0.5,0.1,1.0,0.001,2\n"
+            "5,2,2,0.4,0.2,0.9,0.001,5\n"
         ),
         "episode_metrics.csv": (
             "episode,total_reward,episode_length,terminated,truncated,"
@@ -85,8 +96,6 @@ def create_validated_bundle(
             "1,10.0,2,true,false,1,3,2,1,0.9,50.0,0.5,0.1,0.01\n"
             "2,20.0,3,true,false,0,2,2,0,0.6,0.0,0.7,0.1,0.01\n"
         ),
-        "checkpoints/best_checkpoint.pt": "synthetic checkpoint\n",
-        "checkpoints/final_checkpoint.pt": "synthetic checkpoint\n",
         "training.log": "synthetic completed fixture\n",
         "software_versions.json": "{}\n",
         "provenance.json": "{}\n",
@@ -95,6 +104,29 @@ def create_validated_bundle(
         path = bundle / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
+
+    torch.manual_seed(7)
+    online = QNetwork(8, 4, (8,), nn.ReLU)
+    target = QNetwork(8, 4, (8,), nn.ReLU)
+    optimizer = torch.optim.Adam(online.parameters(), lr=learning_rate)
+    metadata = RunMetadata(
+        experiment_id=experiment_id,
+        run_id="RUN-001",
+        episode=2,
+        global_step=5,
+        configuration_hash=configuration_sha256(bundle / "resolved_config.yaml"),
+        seed=7,
+        git_sha="a" * 40,
+    )
+    for checkpoint_name in ("best_checkpoint.pt", "final_checkpoint.pt"):
+        save_checkpoint(
+            bundle / "checkpoints" / checkpoint_name,
+            model_state=online.state_dict(),
+            target_state=target.state_dict(),
+            optimizer_state=optimizer.state_dict(),
+            scheduler_state={"epsilon": 0.1, "optimization_steps": 1},
+            metadata=metadata,
+        )
 
     artifacts = [
         {
@@ -150,7 +182,7 @@ def create_validated_bundle(
     (bundle / "status" / "COMPLETED.json").write_text(
         json.dumps(marker), encoding="utf-8"
     )
-    validator = TrainingArtifactValidator(checkpoint_loader=lambda path: None)
+    validator = TrainingArtifactValidator(canonical_hashes={})
     report = validator.validate(bundle)
     assert report.valid, report.issues
     receipt = validation_root / experiment_id / "RUN-001" / "validation_report.json"

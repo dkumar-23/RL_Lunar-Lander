@@ -26,10 +26,21 @@ class RuntimeGuardTests(unittest.TestCase):
         with self.assertRaises(ExecutionBoundaryError):
             validate_local_test_limits(max_steps=1, optimization_steps=2)
 
+    def test_local_limits_reject_multiple_episodes(self) -> None:
+        with self.assertRaises(ExecutionBoundaryError):
+            validate_local_test_limits(1, 1, max_episodes=2)
+
+    def test_local_limits_reject_excessive_duration(self) -> None:
+        with self.assertRaises(ExecutionBoundaryError):
+            validate_local_test_limits(1, 1, max_duration_seconds=60.1)
+
     def test_full_training_fails_outside_colab(self) -> None:
         with self.assertRaises(ExecutionBoundaryError):
             attest_colab_full_training(
-                Path.cwd(), "a" * 40, Path("/content/drive/MyDrive/test")
+                Path.cwd(),
+                "a" * 40,
+                Path("/content/drive/MyDrive/test"),
+                1,
             )
 
 

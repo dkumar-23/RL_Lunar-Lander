@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
 import numpy as np
@@ -20,6 +21,7 @@ from src.training import (
 
 _LUNAR_OBSERVATION_DIMENSION = 8
 _LUNAR_ACTION_COUNT = 4
+_MAX_LOCAL_DURATION_SECONDS = 60.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,12 +35,14 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     """Perform and verify one, and only one, synthetic optimizer update."""
     args = parse_args()
+    started = time.monotonic()
+    algorithm = Algorithm(args.algorithm)
     validate_local_test_limits(max_steps=1, optimization_steps=1)
     config = load_training_config(args.config)
     rng = initialize_seed(config.random_seed, deterministic=config.deterministic)
     agent = create_agent(
         config,
-        Algorithm(args.algorithm),
+        algorithm,
         _LUNAR_OBSERVATION_DIMENSION,
         _LUNAR_ACTION_COUNT,
         rng,
@@ -61,6 +65,8 @@ def main() -> int:
         parameter.detach().clone() for parameter in agent.online_network.parameters()
     )
     loss = agent.learn(transitions)
+    if time.monotonic() - started > _MAX_LOCAL_DURATION_SECONDS:
+        raise RuntimeError("Exactly-one-step validation exceeded 60 seconds.")
     after = tuple(agent.online_network.parameters())
     changed = any(
         not torch.equal(left, right.detach())
@@ -73,6 +79,7 @@ def main() -> int:
             {
                 "status": "LOCAL_VERIFIED",
                 "promotable": False,
+                "algorithm": algorithm.value,
                 "optimization_steps": agent.optimization_steps,
                 "parameters_changed": changed,
                 "loss_finite": True,

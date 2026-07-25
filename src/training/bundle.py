@@ -47,7 +47,7 @@ class ColabBundleWriter:
         run_id: str,
         repository_url: str,
         git_commit: str,
-        configuration_path: str,
+        expected_configuration_hash: str,
         agent: BaseAgent,
         validation_set: FixedValidationSet,
         attestation: ColabTrainingAttestation,
@@ -70,7 +70,7 @@ class ColabBundleWriter:
         self.run_id = run_id
         self.repository_url = repository_url
         self.git_commit = git_commit
-        self.configuration_path = configuration_path
+        self.expected_configuration_hash = expected_configuration_hash
         self.agent = agent
         self.validation_set = validation_set
         self.started_at = utc_now()
@@ -82,6 +82,8 @@ class ColabBundleWriter:
         self.configuration_hash = configuration_sha256(
             self.root / "resolved_config.yaml"
         )
+        if self.configuration_hash != self.expected_configuration_hash:
+            raise ValueError("Persisted configuration differs from preregistration.")
         self._write_validation_set()
         self._write_provenance()
         self._write_software_versions()
@@ -188,7 +190,7 @@ class ColabBundleWriter:
             "requested_git_commit": self.git_commit,
             "resolved_git_commit": self.git_commit,
             "git_worktree_clean": True,
-            "configuration_path": self.configuration_path,
+            "configuration_path": "resolved_config.yaml",
             "configuration_hash": self.configuration_hash,
             "random_seed": self.experiment.training.random_seed,
             "execution_platform": "google-colab",

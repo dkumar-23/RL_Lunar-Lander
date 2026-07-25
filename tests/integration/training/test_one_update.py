@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
+import pytest
 import torch
 
 from src.common.seed import initialize_seed
@@ -39,7 +40,10 @@ class _OneStepEnvironment:
         return np.ones(8, dtype=np.float32), 1.0, True, False, {}
 
 
-def test_shared_engine_performs_exactly_one_real_update() -> None:
+@pytest.mark.parametrize("algorithm", [Algorithm.DQN, Algorithm.DDQN])
+def test_shared_engine_performs_exactly_one_real_update(
+    algorithm: Algorithm,
+) -> None:
     """Exercise replay sampling and one real optimizer step under local caps."""
     config = replace(
         load_training_config(Path("configs/training.yaml")),
@@ -51,7 +55,7 @@ def test_shared_engine_performs_exactly_one_real_update() -> None:
         validation_state_count=2,
     )
     rng = initialize_seed(config.random_seed, deterministic=True)
-    agent = create_agent(config, Algorithm.DQN, 8, 4, rng, device="cpu")
+    agent = create_agent(config, algorithm, 8, 4, rng, device="cpu")
     before = tuple(
         parameter.detach().clone() for parameter in agent.online_network.parameters()
     )

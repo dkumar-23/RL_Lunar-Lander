@@ -3,6 +3,7 @@
   "$id": "training-artifact-v1.schema.json",
   "title": "Training Artifact Manifest",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "schema_version",
     "experiment_id",
@@ -28,18 +29,52 @@
   ],
   "properties": {
     "schema_version": {"const": "1.0.0"},
-    "experiment_id": {"pattern": "^EXP-[0-9]{3}$"},
-    "run_id": {"pattern": "^RUN-[0-9]{3}$"},
+    "experiment_id": {"type": "string", "pattern": "^EXP-[0-9]{3}$"},
+    "run_id": {"type": "string", "pattern": "^RUN-[0-9]{3}$"},
     "algorithm": {"enum": ["DQN", "DDQN"]},
     "environment_variant": {"enum": ["original", "modified"]},
+    "repository_url": {
+      "const": "https://github.com/dkumar-23/RL_Lunar-Lander"
+    },
+    "requested_git_commit": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "resolved_git_commit": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "git_worktree_clean": {"const": true},
+    "configuration_path": {"const": "resolved_config.yaml"},
+    "configuration_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "random_seed": {"type": "integer", "minimum": 0},
     "execution_platform": {"const": "google-colab"},
+    "started_at_utc": {"type": "string", "minLength": 1},
+    "completed_at_utc": {"type": "string", "minLength": 1},
+    "duration_seconds": {"type": "number", "minimum": 0},
     "status": {"const": "COMPLETED"},
+    "best_checkpoint_selection_metric": {"type": "string", "minLength": 1},
+    "software_versions_path": {"const": "software_versions.json"},
     "artifacts": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["path", "role", "size_bytes", "sha256"]
+        "additionalProperties": false,
+        "required": ["path", "role", "size_bytes", "sha256"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "role": {"type": "string", "minLength": 1},
+          "size_bytes": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
       }
+    },
+    "artifact_set_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     }
   }
 }

@@ -7,6 +7,8 @@ from .config import (
     TrainingConfig,
     load_experiment_config,
     load_training_config,
+    resolved_experiment_sha256,
+    validate_registered_configuration,
 )
 from .engine import (
     EpisodeMetrics,
@@ -54,7 +56,9 @@ __all__ = [
     "load_experiment_config",
     "load_training_config",
     "mean_max_predicted_q",
+    "resolved_experiment_sha256",
     "resolve_device",
     "restore_training_checkpoint",
+    "validate_registered_configuration",
     "validate_local_test_limits",
 ]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
@@ -260,6 +262,56 @@ def load_experiment_config(path: Path, repository_root: Path) -> ExperimentConfi
 def load_training_config(path: Path) -> TrainingConfig:
     """Load and validate shared training controls for bounded local checks."""
     return TrainingConfig.from_mapping(resolve_configuration(path).values)
+
+
+def resolved_experiment_sha256(experiment: ExperimentConfig) -> str:
+    """Return the canonical identity persisted as the run configuration hash."""
+    canonical = json.dumps(
+        experiment.resolved_values(),
+        ensure_ascii=True,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def validate_registered_configuration(
+    experiment: ExperimentConfig,
+    repository_root: Path,
+) -> str:
+    """Require one experiment to match the tracked canonical hash registry."""
+    repository_root = repository_root.resolve()
+    registry_path = repository_root / "experiments" / "canonical_hashes.json"
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Canonical configuration hash registry is invalid.") from exc
+    if not isinstance(registry, dict) or set(registry) != {
+        "schema_version",
+        "experiments",
+    }:
+        raise ValueError("Canonical configuration hash registry fields are invalid.")
+    entries = registry.get("experiments")
+    if registry.get("schema_version") != "1.0.0" or not isinstance(entries, dict):
+        raise ValueError("Canonical configuration hash registry schema is invalid.")
+    if set(entries) != set(_CANONICAL_MATRIX):
+        raise ValueError(
+            "Canonical configuration hash registry must contain four runs."
+        )
+    entry = entries.get(experiment.experiment_id)
+    if not isinstance(entry, dict) or set(entry) != {
+        "configuration_path",
+        "resolved_configuration_sha256",
+    }:
+        raise ValueError("Canonical configuration hash entry is invalid.")
+    expected_path = experiment.source_path.relative_to(repository_root).as_posix()
+    if entry.get("configuration_path") != expected_path:
+        raise ValueError("Selected configuration path is not preregistered.")
+    observed_hash = resolved_experiment_sha256(experiment)
+    if entry.get("resolved_configuration_sha256") != observed_hash:
+        raise ValueError("Resolved configuration differs from its preregistered hash.")
+    return observed_hash
 
 
 def _repository_path(root: Path, value: str) -> Path:

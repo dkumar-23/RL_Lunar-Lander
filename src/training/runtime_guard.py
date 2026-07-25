@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import importlib.util
 import re
+import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+
+import torch
 
 
 class ExecutionBoundaryError(RuntimeError):
@@ -33,6 +37,8 @@ class ColabTrainingAttestation:
 _COMMIT_PATTERN = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
 _MAX_LOCAL_SMOKE_STEPS = 32
 _MAX_LOCAL_OPTIMIZATION_STEPS = 1
+_MAX_LOCAL_EPISODES = 1
+_MAX_LOCAL_DURATION_SECONDS = 60.0
 
 
 def _is_google_colab() -> bool:
@@ -56,6 +62,7 @@ def attest_colab_full_training(
     repository: Path,
     expected_commit: str,
     drive_root: Path,
+    minimum_free_drive_bytes: int,
 ) -> ColabTrainingAttestation:
     """Fail unless full training is running in an approved Colab checkout.
 
@@ -63,6 +70,7 @@ def attest_colab_full_training(
         repository: Detached, clean repository worktree used for training.
         expected_commit: Exact approved Git object identifier.
         drive_root: Mounted Google Drive destination for persistent artifacts.
+        minimum_free_drive_bytes: Required free capacity before training starts.
 
     Returns:
         Immutable evidence required by the shared engine's full-training path.
@@ -73,6 +81,18 @@ def attest_colab_full_training(
     if not _is_google_colab():
         raise ExecutionBoundaryError(
             "Full training is permitted only in a Google Colab runtime."
+        )
+    if not torch.cuda.is_available() or torch.cuda.device_count() < 1:
+        raise ExecutionBoundaryError(
+            "Full training requires a visible CUDA GPU in Google Colab."
+        )
+    if (
+        isinstance(minimum_free_drive_bytes, bool)
+        or not isinstance(minimum_free_drive_bytes, int)
+        or minimum_free_drive_bytes <= 0
+    ):
+        raise ExecutionBoundaryError(
+            "minimum_free_drive_bytes must be a positive integer."
         )
     if _COMMIT_PATTERN.fullmatch(expected_commit) is None:
         raise ExecutionBoundaryError("An exact 40- or 64-character commit is required.")
@@ -100,24 +120,69 @@ def attest_colab_full_training(
         raise ExecutionBoundaryError("Artifacts must persist beneath /content/drive.")
     if not drive_root.is_dir():
         raise ExecutionBoundaryError(f"Google Drive root does not exist: {drive_root}")
+    probe: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=drive_root,
+            prefix=".rl_lunar_lander_write_probe.",
+            delete=False,
+        ) as stream:
+            probe = Path(stream.name)
+            stream.write(b"preflight")
+    except OSError as exc:
+        raise ExecutionBoundaryError("Google Drive root is not writable.") from exc
+    finally:
+        if probe is not None:
+            probe.unlink(missing_ok=True)
+    if shutil.disk_usage(drive_root).free < minimum_free_drive_bytes:
+        raise ExecutionBoundaryError("Google Drive has insufficient free space.")
     return ColabTrainingAttestation(repository, expected_commit, drive_root)
 
 
-def validate_local_test_limits(max_steps: int, optimization_steps: int) -> None:
+def validate_local_test_limits(
+    max_steps: int,
+    optimization_steps: int,
+    max_episodes: int = _MAX_LOCAL_EPISODES,
+    max_duration_seconds: float = _MAX_LOCAL_DURATION_SECONDS,
+) -> None:
     """Validate non-promotable local smoke and learning-step limits.
 
     Args:
         max_steps: Maximum environment transitions requested.
         optimization_steps: Number of optimizer updates requested.
+        max_episodes: Maximum episodes requested.
+        max_duration_seconds: Maximum wall-clock duration requested.
 
     Raises:
         ExecutionBoundaryError: A local validation exceeds its hard limit.
     """
-    if not 1 <= max_steps <= _MAX_LOCAL_SMOKE_STEPS:
+    if (
+        isinstance(max_steps, bool)
+        or not isinstance(max_steps, int)
+        or not 1 <= max_steps <= _MAX_LOCAL_SMOKE_STEPS
+    ):
         raise ExecutionBoundaryError(
             f"Local smoke tests permit 1-{_MAX_LOCAL_SMOKE_STEPS} steps."
         )
-    if not 0 <= optimization_steps <= _MAX_LOCAL_OPTIMIZATION_STEPS:
+    if (
+        isinstance(optimization_steps, bool)
+        or not isinstance(optimization_steps, int)
+        or not 0 <= optimization_steps <= _MAX_LOCAL_OPTIMIZATION_STEPS
+    ):
         raise ExecutionBoundaryError(
             "Local validation permits at most one optimizer update."
+        )
+    if (
+        isinstance(max_episodes, bool)
+        or not isinstance(max_episodes, int)
+        or not 1 <= max_episodes <= _MAX_LOCAL_EPISODES
+    ):
+        raise ExecutionBoundaryError("Local validation permits exactly one episode.")
+    if (
+        isinstance(max_duration_seconds, bool)
+        or not isinstance(max_duration_seconds, (int, float))
+        or not 0.0 < max_duration_seconds <= _MAX_LOCAL_DURATION_SECONDS
+    ):
+        raise ExecutionBoundaryError(
+            "Local validation permits at most 60 seconds of execution."
         )

@@ -190,3 +190,9 @@ def test_local_engine_suppresses_checkpoints_and_finalizes() -> None:
 
     assert checkpoint_calls == []
     assert agent.online_network.training is False
+
+
+def test_local_engine_rejects_expired_deadline() -> None:
+    """An over-duration operation cannot return local verification evidence."""
+    with pytest.raises(ExecutionBoundaryError, match="wall-clock"):
+        TrainingEngine._check_deadline(0.0)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import math
 import re
 import shutil
 from collections.abc import Callable, Mapping, Sequence
@@ -12,7 +13,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .configuration import ConfigurationError, configuration_sha256
+import torch
+
+from .checkpoint import LoadedCheckpoint, load_checkpoint
+from .configuration import (
+    ConfigurationError,
+    resolve_configuration,
+)
 
 
 class ArtifactValidationError(RuntimeError):
@@ -47,7 +54,7 @@ class ValidationReport:
         return data
 
 
-CheckpointLoader = Callable[[Path], None]
+CheckpointLoader = Callable[[Path], LoadedCheckpoint]
 
 _EXPERIMENT_PATTERN = re.compile(r"EXP-[0-9]{3}")
 _RUN_PATTERN = re.compile(r"RUN-[0-9]{3}")
@@ -116,6 +123,21 @@ _MANIFEST_FIELDS = {
     "artifacts",
     "artifact_set_sha256",
 }
+_RESOLVED_FIELDS = {
+    "experiment_id",
+    "algorithm",
+    "environment_variant",
+    "training",
+    "environment",
+}
+_ARTIFACT_FIELDS = {"path", "role", "size_bytes", "sha256"}
+_REPOSITORY_URL = "https://github.com/dkumar-23/RL_Lunar-Lander"
+_CANONICAL_IDENTITIES = {
+    "EXP-001": ("DQN", "original"),
+    "EXP-002": ("DQN", "modified"),
+    "EXP-003": ("DDQN", "original"),
+    "EXP-004": ("DDQN", "modified"),
+}
 
 
 def file_sha256(path: Path) -> str:
@@ -153,34 +175,298 @@ def _safe_relative_path(value: object) -> PurePosixPath | None:
     return path
 
 
-def _default_checkpoint_loader(path: Path) -> None:
-    try:
-        import torch
-    except ImportError as exc:
-        raise ArtifactValidationError(
-            "PyTorch is required to validate checkpoint loadability."
-        ) from exc
+def _default_checkpoint_loader(path: Path) -> LoadedCheckpoint:
+    return load_checkpoint(path, map_location="cpu")
 
-    try:
-        state = torch.load(path, map_location="cpu", weights_only=True)
-    except Exception as exc:
-        raise ArtifactValidationError(
-            f"Checkpoint could not be loaded: {path}"
-        ) from exc
 
-    def check_finite(value: object) -> None:
-        if isinstance(value, torch.Tensor) and not torch.isfinite(value).all().item():
-            raise ArtifactValidationError(
-                f"Checkpoint contains non-finite data: {path}"
+def _validate_resolved_identity(
+    values: Mapping[str, Any],
+    manifest: Mapping[str, Any],
+    issue: Callable[[str, str], None],
+) -> dict[str, tuple[int, ...]] | None:
+    if set(values) != _RESOLVED_FIELDS:
+        issue("configuration.fields", "Resolved configuration fields are invalid.")
+        return None
+    training = values.get("training")
+    environment = values.get("environment")
+    if not isinstance(training, Mapping) or not isinstance(environment, Mapping):
+        issue("configuration.sections", "Training and environment must be mappings.")
+        return None
+    comparisons = (
+        ("experiment_id", values.get("experiment_id")),
+        ("algorithm", values.get("algorithm")),
+        ("environment_variant", values.get("environment_variant")),
+        ("random_seed", training.get("random_seed")),
+    )
+    for field, configured in comparisons:
+        if manifest.get(field) != configured:
+            issue(
+                f"configuration.{field}",
+                f"Manifest {field} differs from resolved configuration.",
             )
-        if isinstance(value, Mapping):
-            for child in value.values():
-                check_finite(child)
-        elif isinstance(value, (list, tuple)):
-            for child in value:
-                check_finite(child)
+    if environment.get("random_seed") != training.get("random_seed"):
+        issue("configuration.seed", "Training and environment seeds differ.")
+    if environment.get("environment_name") != "LunarLander-v3":
+        issue("configuration.environment", "Unsupported canonical environment.")
+        return None
+    hidden_sizes = training.get("hidden_sizes")
+    if not isinstance(hidden_sizes, list) or any(
+        isinstance(size, bool) or not isinstance(size, int) or size <= 0
+        for size in hidden_sizes
+    ):
+        issue("configuration.model", "hidden_sizes must contain positive integers.")
+        return None
+    dimensions = (8, *hidden_sizes, 4)
+    shapes: dict[str, tuple[int, ...]] = {}
+    for index, (input_width, output_width) in enumerate(
+        zip(dimensions, dimensions[1:], strict=False)
+    ):
+        layer = index * 2
+        shapes[f"network.{layer}.weight"] = (output_width, input_width)
+        shapes[f"network.{layer}.bias"] = (output_width,)
+    return shapes
 
-    check_finite(state)
+
+def _validate_manifest_contract(
+    manifest: Mapping[str, Any],
+    issue: Callable[[str, str], None],
+) -> None:
+    """Apply the versioned manifest schema without permissive coercion."""
+    experiment_id = manifest.get("experiment_id")
+    identity = (manifest.get("algorithm"), manifest.get("environment_variant"))
+    expected_identity = (
+        _CANONICAL_IDENTITIES.get(experiment_id)
+        if isinstance(experiment_id, str)
+        else None
+    )
+    if expected_identity != identity:
+        issue(
+            "manifest.identity",
+            "Experiment, algorithm, and variant are inconsistent.",
+        )
+    expected_literals = {
+        "schema_version": "1.0.0",
+        "repository_url": _REPOSITORY_URL,
+        "configuration_path": "resolved_config.yaml",
+        "execution_platform": "google-colab",
+        "status": "COMPLETED",
+        "software_versions_path": "software_versions.json",
+    }
+    for field, expected in expected_literals.items():
+        if manifest.get(field) != expected:
+            issue(f"manifest.{field}", f"Manifest {field} is invalid.")
+    configuration_hash = manifest.get("configuration_hash")
+    artifact_set_hash = manifest.get("artifact_set_sha256")
+    for field, value in (
+        ("configuration_hash", configuration_hash),
+        ("artifact_set_sha256", artifact_set_hash),
+    ):
+        if not isinstance(value, str) or _SHA256_PATTERN.fullmatch(value) is None:
+            issue(f"manifest.{field}", f"Manifest {field} must be SHA-256.")
+    seed = manifest.get("random_seed")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        issue("manifest.random_seed", "Manifest random_seed is invalid.")
+    duration = manifest.get("duration_seconds")
+    if (
+        isinstance(duration, bool)
+        or not isinstance(duration, (int, float))
+        or not math.isfinite(float(duration))
+        or duration < 0
+    ):
+        issue("manifest.duration", "Manifest duration_seconds is invalid.")
+    for field in (
+        "started_at_utc",
+        "completed_at_utc",
+        "best_checkpoint_selection_metric",
+    ):
+        value = manifest.get(field)
+        if not isinstance(value, str) or not value:
+            issue(f"manifest.{field}", f"Manifest {field} must be non-empty.")
+
+
+def _validate_checkpoint_compatibility(
+    checkpoint: LoadedCheckpoint,
+    manifest: Mapping[str, Any],
+    expected_shapes: Mapping[str, tuple[int, ...]],
+) -> None:
+    metadata = checkpoint.metadata
+    comparisons = {
+        "experiment_id": metadata.experiment_id,
+        "run_id": metadata.run_id,
+        "configuration_hash": metadata.configuration_hash,
+        "random_seed": metadata.seed,
+        "resolved_git_commit": metadata.git_sha,
+    }
+    for field, observed in comparisons.items():
+        if manifest.get(field) != observed:
+            raise ArtifactValidationError(
+                f"Checkpoint {field} differs from the manifest."
+            )
+    for state_name, state in (
+        ("model_state", checkpoint.model_state),
+        ("target_state", checkpoint.target_state),
+    ):
+        if set(state) != set(expected_shapes):
+            raise ArtifactValidationError(
+                f"Checkpoint {state_name} parameter names are incompatible."
+            )
+        for name, expected_shape in expected_shapes.items():
+            value = state[name]
+            if not isinstance(value, torch.Tensor):
+                raise ArtifactValidationError(
+                    f"Checkpoint {state_name}.{name} is not a tensor."
+                )
+            if tuple(value.shape) != expected_shape:
+                raise ArtifactValidationError(
+                    f"Checkpoint {state_name}.{name} has incompatible dimensions."
+                )
+            if not bool(torch.isfinite(value).all().item()):
+                raise ArtifactValidationError(
+                    f"Checkpoint {state_name}.{name} contains non-finite values."
+                )
+    optimizer = checkpoint.optimizer_state
+    if set(optimizer) != {"state", "param_groups"}:
+        raise ArtifactValidationError("Checkpoint optimizer state is incompatible.")
+    optimizer_state = optimizer["state"]
+    parameter_groups = optimizer["param_groups"]
+    if not isinstance(optimizer_state, Mapping) or not isinstance(
+        parameter_groups, list
+    ):
+        raise ArtifactValidationError("Checkpoint optimizer structure is invalid.")
+    parameter_ids: list[object] = []
+    for group in parameter_groups:
+        if not isinstance(group, Mapping) or not isinstance(group.get("params"), list):
+            raise ArtifactValidationError(
+                "Checkpoint optimizer parameter groups are invalid."
+            )
+        parameter_ids.extend(group["params"])
+    if len(parameter_ids) != len(expected_shapes) or len(set(parameter_ids)) != len(
+        parameter_ids
+    ):
+        raise ArtifactValidationError(
+            "Checkpoint optimizer parameter count is incompatible."
+        )
+    if not set(optimizer_state).issubset(parameter_ids):
+        raise ArtifactValidationError("Checkpoint optimizer parameter IDs are invalid.")
+    _validate_finite_checkpoint_value(optimizer)
+    scheduler = checkpoint.scheduler_state
+    if scheduler is None or set(scheduler) != {"epsilon", "optimization_steps"}:
+        raise ArtifactValidationError("Checkpoint scheduler state is incomplete.")
+    epsilon = scheduler["epsilon"]
+    optimization_steps = scheduler["optimization_steps"]
+    if (
+        isinstance(epsilon, bool)
+        or not isinstance(epsilon, (int, float))
+        or not math.isfinite(float(epsilon))
+        or not 0.0 <= epsilon <= 1.0
+    ):
+        raise ArtifactValidationError("Checkpoint epsilon is invalid.")
+    if (
+        isinstance(optimization_steps, bool)
+        or not isinstance(optimization_steps, int)
+        or optimization_steps < 0
+    ):
+        raise ArtifactValidationError("Checkpoint optimization_steps is invalid.")
+
+
+def _validate_finite_checkpoint_value(value: object) -> None:
+    """Reject non-finite tensors nested in optimizer state."""
+    if isinstance(value, torch.Tensor):
+        if not bool(torch.isfinite(value).all().item()):
+            raise ArtifactValidationError(
+                "Checkpoint optimizer contains non-finite tensors."
+            )
+    elif isinstance(value, Mapping):
+        for child in value.values():
+            _validate_finite_checkpoint_value(child)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            _validate_finite_checkpoint_value(child)
+
+
+def _load_canonical_hashes(path: Path) -> dict[str, str]:
+    """Load the tracked four-run registry used at the local trust boundary."""
+    try:
+        registry = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ArtifactValidationError(
+            "Canonical configuration hash registry is unavailable."
+        ) from exc
+    if not isinstance(registry, dict) or set(registry) != {
+        "schema_version",
+        "experiments",
+    }:
+        raise ArtifactValidationError("Canonical hash registry fields are invalid.")
+    experiments = registry.get("experiments")
+    if registry.get("schema_version") != "1.0.0" or not isinstance(experiments, dict):
+        raise ArtifactValidationError("Canonical hash registry schema is invalid.")
+    if set(experiments) != set(_CANONICAL_IDENTITIES):
+        raise ArtifactValidationError("Canonical hash registry must contain four runs.")
+    hashes: dict[str, str] = {}
+    for experiment_id, entry in experiments.items():
+        if not isinstance(entry, dict) or set(entry) != {
+            "configuration_path",
+            "resolved_configuration_sha256",
+        }:
+            raise ArtifactValidationError("Canonical hash registry entry is invalid.")
+        digest = entry.get("resolved_configuration_sha256")
+        if not isinstance(digest, str) or _SHA256_PATTERN.fullmatch(digest) is None:
+            raise ArtifactValidationError("Canonical configuration hash is invalid.")
+        hashes[experiment_id] = digest
+    return hashes
+
+
+def _validate_completion_progress(
+    bundle: Path,
+    expected_episodes: int,
+    checkpoints: Mapping[str, LoadedCheckpoint],
+    issue: Callable[[str, str], None],
+) -> None:
+    """Require terminal metrics and checkpoint progress to prove full duration."""
+    try:
+        with (bundle / "episode_metrics.csv").open(
+            "r", encoding="utf-8", newline=""
+        ) as stream:
+            episode_rows = list(csv.DictReader(stream))
+        with (bundle / "metrics.csv").open("r", encoding="utf-8", newline="") as stream:
+            optimization_rows = list(csv.DictReader(stream))
+        episode_numbers = [int(row["episode"]) for row in episode_rows]
+        optimization_episodes = [int(row["episode"]) for row in optimization_rows]
+        episode_lengths = [int(row["episode_length"]) for row in episode_rows]
+        metric_global_steps = [int(row["global_step"]) for row in optimization_rows]
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        issue("progress.metrics", f"Unable to validate training progress: {exc}")
+        return
+    expected_sequence = list(range(1, expected_episodes + 1))
+    if (
+        episode_numbers != expected_sequence
+        or optimization_episodes != expected_sequence
+    ):
+        issue(
+            "progress.episodes",
+            "Training metrics do not cover every configured episode.",
+        )
+    final = checkpoints.get("final_checkpoint.pt")
+    best = checkpoints.get("best_checkpoint.pt")
+    if final is None or best is None:
+        return
+    if final.metadata.episode != expected_episodes:
+        issue(
+            "progress.final_episode",
+            "Final checkpoint is not from the last episode.",
+        )
+    if not 1 <= best.metadata.episode <= expected_episodes:
+        issue("progress.best_episode", "Best checkpoint episode is out of range.")
+    if metric_global_steps:
+        expected_global_steps = sum(episode_lengths)
+        if (
+            final.metadata.global_step != expected_global_steps
+            or metric_global_steps[-1] != expected_global_steps
+        ):
+            issue(
+                "progress.global_steps",
+                "Final checkpoint and metrics global steps are inconsistent.",
+            )
 
 
 class TrainingArtifactValidator:
@@ -191,8 +477,17 @@ class TrainingArtifactValidator:
             restrictive PyTorch loading; tests may inject a deterministic loader.
     """
 
-    def __init__(self, checkpoint_loader: CheckpointLoader | None = None) -> None:
+    def __init__(
+        self,
+        checkpoint_loader: CheckpointLoader | None = None,
+        canonical_hashes: Mapping[str, str] | None = None,
+    ) -> None:
         self._checkpoint_loader = checkpoint_loader or _default_checkpoint_loader
+        self._canonical_hashes = (
+            dict(canonical_hashes)
+            if canonical_hashes is not None
+            else _load_canonical_hashes(Path("experiments/canonical_hashes.json"))
+        )
 
     def validate(self, bundle: Path) -> ValidationReport:
         """Validate a bundle without mutating it."""
@@ -203,6 +498,10 @@ class TrainingArtifactValidator:
         experiment_id: str | None = None
         run_id: str | None = None
         manifest_hash: str | None = None
+        resolved_values: Mapping[str, Any] | None = None
+        expected_shapes: dict[str, tuple[int, ...]] | None = None
+        expected_episodes: int | None = None
+        loaded_checkpoints: dict[str, LoadedCheckpoint] = {}
 
         def issue(code: str, message: str) -> None:
             issues.append(ValidationIssue(code, message))
@@ -239,11 +538,14 @@ class TrainingArtifactValidator:
 
         if manifest:
             missing_fields = sorted(_MANIFEST_FIELDS - manifest.keys())
-            if missing_fields:
+            extra_fields = sorted(manifest.keys() - _MANIFEST_FIELDS)
+            if missing_fields or extra_fields:
                 issue(
                     "manifest.fields",
-                    f"Manifest is missing fields: {', '.join(missing_fields)}",
+                    "Manifest fields differ from schema; "
+                    f"missing={missing_fields}, extra={extra_fields}",
                 )
+            _validate_manifest_contract(manifest, issue)
             experiment_id = manifest.get("experiment_id")
             run_id = manifest.get("run_id")
             if (
@@ -299,6 +601,13 @@ class TrainingArtifactValidator:
             if not isinstance(entry, dict):
                 issue("artifact.entry", "Every artifact entry must be an object.")
                 continue
+            if set(entry) != _ARTIFACT_FIELDS:
+                issue("artifact.fields", "Artifact entry fields are invalid.")
+                continue
+            role = entry.get("role")
+            if not isinstance(role, str) or not role:
+                issue("artifact.role", "Artifact role must be non-empty.")
+                continue
             relative = _safe_relative_path(entry.get("path"))
             if relative is None:
                 issue("artifact.path", f"Unsafe artifact path: {entry.get('path')!r}")
@@ -316,7 +625,11 @@ class TrainingArtifactValidator:
             ):
                 issue("artifact.sha256", f"Invalid hash for {relative_text}")
                 continue
-            if not isinstance(expected_size, int) or expected_size < 0:
+            if (
+                isinstance(expected_size, bool)
+                or not isinstance(expected_size, int)
+                or expected_size < 0
+            ):
                 issue("artifact.size", f"Invalid size for {relative_text}")
                 continue
 
@@ -351,9 +664,32 @@ class TrainingArtifactValidator:
         config = bundle / "resolved_config.yaml"
         if config.is_file() and manifest:
             try:
-                resolved_hash = configuration_sha256(config)
+                resolved = resolve_configuration(config)
+                resolved_hash = resolved.sha256
                 if manifest.get("configuration_hash") != resolved_hash:
                     issue("configuration.hash", "Resolved configuration hash differs.")
+                resolved_values = resolved.values
+                expected_shapes = _validate_resolved_identity(
+                    resolved_values, manifest, issue
+                )
+                expected_hash = self._canonical_hashes.get(str(experiment_id))
+                if self._canonical_hashes and expected_hash != resolved_hash:
+                    issue(
+                        "configuration.canonical_hash",
+                        "Resolved configuration is not preregistered.",
+                    )
+                training = resolved_values.get("training")
+                episodes = (
+                    training.get("episodes") if isinstance(training, Mapping) else None
+                )
+                if (
+                    isinstance(episodes, bool)
+                    or not isinstance(episodes, int)
+                    or episodes <= 0
+                ):
+                    issue("configuration.episodes", "Training episodes are invalid.")
+                else:
+                    expected_episodes = episodes
             except ConfigurationError as exc:
                 issue("configuration.invalid", str(exc))
 
@@ -371,10 +707,29 @@ class TrainingArtifactValidator:
         ):
             if checkpoint.is_file():
                 try:
-                    self._checkpoint_loader(checkpoint)
+                    loaded_checkpoint = self._checkpoint_loader(checkpoint)
+                    if expected_shapes is None or resolved_values is None:
+                        raise ArtifactValidationError(
+                            "Resolved configuration is unavailable for checkpoint "
+                            "validation."
+                        )
+                    _validate_checkpoint_compatibility(
+                        loaded_checkpoint,
+                        manifest,
+                        expected_shapes,
+                    )
+                    loaded_checkpoints[checkpoint.name] = loaded_checkpoint
                     checkpoints_checked += 1
                 except Exception as exc:
                     issue("checkpoint.invalid", str(exc))
+
+        if expected_episodes is not None:
+            _validate_completion_progress(
+                bundle,
+                expected_episodes,
+                loaded_checkpoints,
+                issue,
+            )
 
         allowed_undeclared = {
             "manifest.json",
