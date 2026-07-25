@@ -1,0 +1,8 @@
+validated_root: outputs/colab/validated
+validation_root: outputs/colab/validation
+output_root: outputs/evaluation
+episodes: 100
+max_steps_per_episode: 1000
+random_seed: 42
+checkpoint: best
+device: cpu
