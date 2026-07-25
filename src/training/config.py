@@ -9,7 +9,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from src.common.configuration import resolve_configuration
+from src.common import resolve_configuration
 from src.environment import EnvironmentConfig
 
 

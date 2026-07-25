@@ -5,10 +5,15 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from typing import Any, ClassVar
 
 
 class ColabNotebookTests(unittest.TestCase):
     """Ensure the notebook stays thin, clean, and provenance-aware."""
+
+    path: ClassVar[Path]
+    notebook: ClassVar[dict[str, Any]]
+    source: ClassVar[str]
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -26,7 +31,7 @@ class ColabNotebookTests(unittest.TestCase):
 
     def test_notebook_requires_exact_commit(self) -> None:
         self.assertIn("GIT_COMMIT_SHA", self.source)
-        self.assertIn("checkout\", \"--detach", self.source)
+        self.assertIn('checkout", "--detach', self.source)
         self.assertIn("resolved_commit != GIT_COMMIT_SHA", self.source)
 
     def test_notebook_uses_drive_and_colab_full_context(self) -> None:
@@ -35,9 +40,11 @@ class ColabNotebookTests(unittest.TestCase):
         self.assertIn("colab-full", self.source)
 
     def test_notebook_clones_approved_repository(self) -> None:
-        self.assertIn(
-            "https://github.com/dkumar-23/RL_Lunar-Lander", self.source
-        )
+        self.assertIn("https://github.com/dkumar-23/RL_Lunar-Lander", self.source)
+
+    def test_notebook_delegates_to_versioned_training_entrypoint(self) -> None:
+        self.assertIn('"-m", "scripts.train"', self.source)
+        self.assertIn('"--execution-context", "colab-full"', self.source)
 
 
 if __name__ == "__main__":

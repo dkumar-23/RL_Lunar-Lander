@@ -12,7 +12,6 @@ import numpy as np
 
 from src.agents import BaseAgent
 from src.environment import EnvironmentConfig, is_safe_landing
-from src.environment.action_failure import THRUSTER_ACTIONS
 from src.memory import Observation, ReplayBuffer, Transition
 
 from .config import TrainingConfig
@@ -270,7 +269,7 @@ class TrainingEngine:
 
         for episode_step in range(1, self.config.max_steps_per_episode + 1):
             action = self.agent.select_action(state, explore=True)
-            if action in THRUSTER_ACTIONS:
+            if action != 0:
                 selected_thrusters += 1
             next_observation, reward, terminated, truncated, _ = self.environment.step(
                 action

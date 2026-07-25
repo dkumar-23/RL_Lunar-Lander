@@ -58,9 +58,7 @@ class ArtifactValidationTests(unittest.TestCase):
 
     def _write_manifest_and_markers(self) -> None:
         artifacts = []
-        for path in sorted(
-            item for item in self.bundle.rglob("*") if item.is_file()
-        ):
+        for path in sorted(item for item in self.bundle.rglob("*") if item.is_file()):
             relative = path.relative_to(self.bundle).as_posix()
             artifacts.append(
                 {
@@ -101,7 +99,9 @@ class ArtifactValidationTests(unittest.TestCase):
             json.dumps(manifest, sort_keys=True, separators=(",", ":")),
             encoding="utf-8",
         )
-        integrity_paths = [entry["path"] for entry in artifacts] + ["manifest.json"]
+        integrity_paths = [str(entry["path"]) for entry in artifacts] + [
+            "manifest.json"
+        ]
         integrity = "".join(
             f"{file_sha256(self.bundle / relative)}  {relative}\n"
             for relative in integrity_paths

@@ -22,8 +22,7 @@ from src.common import (
     resolve_configuration,
 )
 from src.environment import EnvironmentConfig, create_environment, is_safe_landing
-from src.training.config import Algorithm, TrainingConfig
-from src.training.factory import create_agent, environment_dimensions
+from src.training import Algorithm, TrainingConfig, create_agent, environment_dimensions
 
 from .config import EvaluationConfig
 from .metrics import EpisodeMetrics, aggregate_metrics

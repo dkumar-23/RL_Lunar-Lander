@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypeAlias
 
 import numpy as np
 import numpy.typing as npt
 
-Observation: TypeAlias = npt.NDArray[np.generic]
+type Observation = npt.NDArray[np.generic]
 
 
 @dataclass(frozen=True, slots=True, eq=False)

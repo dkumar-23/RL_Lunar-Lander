@@ -246,9 +246,10 @@ class TrainingArtifactValidator:
                 )
             experiment_id = manifest.get("experiment_id")
             run_id = manifest.get("run_id")
-            if not isinstance(experiment_id, str) or _EXPERIMENT_PATTERN.fullmatch(
-                experiment_id
-            ) is None:
+            if (
+                not isinstance(experiment_id, str)
+                or _EXPERIMENT_PATTERN.fullmatch(experiment_id) is None
+            ):
                 issue("manifest.experiment", "Invalid experiment_id.")
             if not isinstance(run_id, str) or _RUN_PATTERN.fullmatch(run_id) is None:
                 issue("manifest.run", "Invalid run_id.")
@@ -309,9 +310,10 @@ class TrainingArtifactValidator:
             declared.add(relative_text)
             expected_hash = entry.get("sha256")
             expected_size = entry.get("size_bytes")
-            if not isinstance(expected_hash, str) or _SHA256_PATTERN.fullmatch(
-                expected_hash
-            ) is None:
+            if (
+                not isinstance(expected_hash, str)
+                or _SHA256_PATTERN.fullmatch(expected_hash) is None
+            ):
                 issue("artifact.sha256", f"Invalid hash for {relative_text}")
                 continue
             if not isinstance(expected_size, int) or expected_size < 0:
@@ -356,9 +358,7 @@ class TrainingArtifactValidator:
                 issue("configuration.invalid", str(exc))
 
         self._validate_csv(bundle / "metrics.csv", _METRIC_COLUMNS, issue)
-        self._validate_csv(
-            bundle / "episode_metrics.csv", _EPISODE_COLUMNS, issue
-        )
+        self._validate_csv(bundle / "episode_metrics.csv", _EPISODE_COLUMNS, issue)
         self._validate_integrity_file(
             bundle,
             declared | ({"manifest.json"} if manifest_path.is_file() else set()),
@@ -386,9 +386,12 @@ class TrainingArtifactValidator:
             if path.is_symlink():
                 issue("bundle.symlink", f"Symlinks are prohibited: {path}")
             if path.is_file():
-                relative = path.relative_to(bundle).as_posix()
-                if relative not in declared and relative not in allowed_undeclared:
-                    issue("bundle.undeclared", f"Undeclared file: {relative}")
+                relative_file = path.relative_to(bundle).as_posix()
+                if (
+                    relative_file not in declared
+                    and relative_file not in allowed_undeclared
+                ):
+                    issue("bundle.undeclared", f"Undeclared file: {relative_file}")
 
         return ValidationReport(
             not issues,

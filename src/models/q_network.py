@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import TypeAlias, cast
+from typing import cast
 
 import torch
 from torch import nn
 
-ActivationFactory: TypeAlias = Callable[[], nn.Module]
+type ActivationFactory = Callable[[], nn.Module]
 
 
 class QNetwork(nn.Module):
