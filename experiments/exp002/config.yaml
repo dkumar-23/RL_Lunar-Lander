@@ -1,0 +1,5 @@
+experiment_id: EXP-002
+algorithm: DQN
+environment_variant: modified
+training_config: configs/training.yaml
+environment_config: configs/environment.yaml

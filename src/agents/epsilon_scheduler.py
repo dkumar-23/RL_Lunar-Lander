@@ -50,3 +50,14 @@ class EpsilonScheduler:
         """Restore and return the configured initial epsilon."""
         self._epsilon = self._initial_epsilon
         return self._epsilon
+
+    def restore(self, epsilon: float) -> float:
+        """Restore a validated checkpoint value within configured bounds."""
+        if (
+            not math.isfinite(epsilon)
+            or epsilon < self._final_epsilon
+            or epsilon > self._initial_epsilon
+        ):
+            raise ValueError("Restored epsilon is outside configured bounds.")
+        self._epsilon = epsilon
+        return self._epsilon

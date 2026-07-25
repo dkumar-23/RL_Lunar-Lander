@@ -212,6 +212,19 @@ class BaseAgent(ABC):
         self.target_network.load_state_dict(self.online_network.state_dict())
         self.target_network.eval()
 
+    def restore_training_progress(
+        self, *, epsilon: float, optimization_steps: int
+    ) -> None:
+        """Restore validated scheduler and target-sync progress from a checkpoint."""
+        if (
+            isinstance(optimization_steps, bool)
+            or not isinstance(optimization_steps, int)
+            or optimization_steps < 0
+        ):
+            raise ValueError("optimization_steps must be a non-negative integer.")
+        self.epsilon_scheduler.restore(epsilon)
+        self._optimization_steps = optimization_steps
+
     def train(self) -> None:
         """Place the online network in training mode."""
         self.online_network.train()

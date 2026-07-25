@@ -5,7 +5,8 @@ from __future__ import annotations
 import importlib.util
 import re
 import subprocess
-from enum import Enum
+from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 
@@ -13,11 +14,20 @@ class ExecutionBoundaryError(RuntimeError):
     """Raised when execution would violate CON-011."""
 
 
-class ExecutionContext(str, Enum):
+class ExecutionContext(StrEnum):
     """Supported training execution contexts."""
 
     LOCAL_TEST = "local-test"
     COLAB_FULL = "colab-full"
+
+
+@dataclass(frozen=True)
+class ColabTrainingAttestation:
+    """Opaque evidence that CON-011 runtime checks passed for one checkout."""
+
+    repository: Path
+    git_commit: str
+    drive_root: Path
 
 
 _COMMIT_PATTERN = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
@@ -46,13 +56,16 @@ def attest_colab_full_training(
     repository: Path,
     expected_commit: str,
     drive_root: Path,
-) -> None:
+) -> ColabTrainingAttestation:
     """Fail unless full training is running in an approved Colab checkout.
 
     Args:
         repository: Detached, clean repository worktree used for training.
         expected_commit: Exact approved Git object identifier.
         drive_root: Mounted Google Drive destination for persistent artifacts.
+
+    Returns:
+        Immutable evidence required by the shared engine's full-training path.
 
     Raises:
         ExecutionBoundaryError: The runtime, source, or storage is not approved.
@@ -87,6 +100,7 @@ def attest_colab_full_training(
         raise ExecutionBoundaryError("Artifacts must persist beneath /content/drive.")
     if not drive_root.is_dir():
         raise ExecutionBoundaryError(f"Google Drive root does not exist: {drive_root}")
+    return ColabTrainingAttestation(repository, expected_commit, drive_root)
 
 
 def validate_local_test_limits(max_steps: int, optimization_steps: int) -> None:
