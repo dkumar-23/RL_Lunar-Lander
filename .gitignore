@@ -21,3 +21,6 @@ reports/generated/
 .env
 .env.*
 !.env.example
+
+# Repository documentation remains local and is not committed.
+*.md
