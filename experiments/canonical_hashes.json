@@ -3,19 +3,19 @@
   "experiments": {
     "EXP-001": {
       "configuration_path": "experiments/exp001/config.yaml",
-      "resolved_configuration_sha256": "5d92856bebe55fba9be4af57bea9b89c1f08d25993e3ab96015a08faef44773d"
+      "resolved_configuration_sha256": "221cf6d22cce7f91b4ee7158e82069748f6bc43cf8c354d89950c29403c643f0"
     },
     "EXP-002": {
       "configuration_path": "experiments/exp002/config.yaml",
-      "resolved_configuration_sha256": "7825bcf1050f19ea4159ca5d4f6dd8e2df8bfa56291424fcc6657f8e15f57f99"
+      "resolved_configuration_sha256": "a7741da3f1ccaeafa4af91d92e0f69a91dd3024c2d7161da2bb93f86cc337f8c"
     },
     "EXP-003": {
       "configuration_path": "experiments/exp003/config.yaml",
-      "resolved_configuration_sha256": "2df5549a59291007a0729eafe6d86c536aab24624ab108165bad8d4c2a054e01"
+      "resolved_configuration_sha256": "626b55b1fcf30b35de9b2d40a1439c8878261c23e810c144179e9bbc08c47071"
     },
     "EXP-004": {
       "configuration_path": "experiments/exp004/config.yaml",
-      "resolved_configuration_sha256": "cfe41ea8b82e0ff39a9f22086fddc2ceabee2537d5d7a62e22a4b3aaaf3957bb"
+      "resolved_configuration_sha256": "f06917c6484987f2724c1f06fd9624ea843b74756fb0bbe076d067d214621e5b"
     }
   }
 }
