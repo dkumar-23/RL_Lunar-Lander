@@ -74,17 +74,20 @@ def test_generate_emits_exactly_four_deterministic_assignment_plots(
     first_hashes = [file_sha256(path) for path in first]
     second = second_engine.generate([item.bundle for item in reversed(fixtures)])
 
-    assert len(first) == 4
+    assert len(first) == 5
     assert {path.stem for path in first} == {
         "episode_reward",
         "average_predicted_q",
         "landing_success_100_episode_moving",
         "average_thruster_activations",
+        "average_thruster_activations_selected_vs_executed",
     }
     assert [file_sha256(path) for path in second] == first_hashes
 
 
-def test_load_uses_executed_not_selected_thruster_activations(tmp_path: Path) -> None:
+def test_load_includes_both_selected_and_executed_thruster_activations(
+    tmp_path: Path,
+) -> None:
     fixtures = _fixtures(tmp_path)
     engine = VisualizationEngine(
         _config(fixtures, tmp_path / "plots"), validator=fixtures[0].validator
@@ -92,6 +95,7 @@ def test_load_uses_executed_not_selected_thruster_activations(tmp_path: Path) ->
 
     series = engine.load([item.bundle for item in fixtures])
 
+    assert series[0].selected_thruster_activations == (3.0, 2.0)
     assert series[0].executed_thruster_activations == (2.0, 2.0)
 
 
@@ -119,6 +123,6 @@ def test_generate_exports_png_pdf_and_svg(tmp_path: Path) -> None:
 
     outputs = engine.generate([item.bundle for item in fixtures])
 
-    assert len(outputs) == 12
+    assert len(outputs) == 15
     assert {path.suffix for path in outputs} == {".png", ".pdf", ".svg"}
     assert all(path.stat().st_size > 0 for path in outputs)

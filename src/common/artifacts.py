@@ -72,6 +72,10 @@ _REQUIRED_PAYLOADS = {
     "provenance.json",
 }
 
+_OPTIONAL_PAYLOADS: set[str] = {
+    "checkpoints/best_moving_average_checkpoint.pt",
+}
+
 _METRIC_COLUMNS = {
     "global_step",
     "episode",

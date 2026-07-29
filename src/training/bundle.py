@@ -95,10 +95,18 @@ class ColabBundleWriter:
             file_path=self.root / "training.log",
         )
 
-    def save_checkpoint(self, kind: str, episode: int, global_step: int) -> None:
-        """Save a best, periodic, or final checkpoint through common services."""
+    def save_checkpoint(
+        self,
+        kind: str,
+        episode: int,
+        global_step: int,
+        extra_scheduler_state: dict[str, object] | None = None,
+    ) -> None:
+        """Save a best, best_moving_average, periodic, or final checkpoint."""
         if kind == "best":
             name = "best_checkpoint.pt"
+        elif kind == "best_moving_average":
+            name = "best_moving_average_checkpoint.pt"
         elif kind == "final":
             name = "final_checkpoint.pt"
         elif kind == "periodic":
@@ -114,15 +122,18 @@ class ColabBundleWriter:
             seed=self.experiment.training.random_seed,
             git_sha=self.git_commit,
         )
+        scheduler_state: dict[str, object] = {
+            "epsilon": self.agent.epsilon,
+            "optimization_steps": self.agent.optimization_steps,
+        }
+        if extra_scheduler_state is not None:
+            scheduler_state.update(extra_scheduler_state)
         save_checkpoint(
             self.root / "checkpoints" / name,
             model_state=self.agent.online_network.state_dict(),
             target_state=self.agent.target_network.state_dict(),
             optimizer_state=self.agent.optimizer.state_dict(),
-            scheduler_state={
-                "epsilon": self.agent.epsilon,
-                "optimization_steps": self.agent.optimization_steps,
-            },
+            scheduler_state=scheduler_state,
             metadata=metadata,
         )
         self.logger.info(

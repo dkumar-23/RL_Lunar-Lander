@@ -96,7 +96,7 @@ class TrainingResult:
     optimization_steps: int
 
 
-CheckpointCallback = Callable[[str, int, int], None]
+CheckpointCallback = Callable[[str, int, int, dict[str, object] | None], None]
 
 
 class TrainingEngine:
@@ -215,6 +215,8 @@ class TrainingEngine:
         optimization_rows: list[OptimizationMetrics] = []
         episode_rows: list[EpisodeMetrics] = []
         best_reward = float("-inf")
+        best_moving_avg = float("-inf")
+        recent_rewards: list[float] = []
         deadline = (
             time.monotonic() + duration_limit if duration_limit is not None else None
         )
@@ -247,6 +249,22 @@ class TrainingEngine:
             if episode_row.total_reward > best_reward:
                 best_reward = episode_row.total_reward
                 self.checkpoint("best", episode)
+
+            recent_rewards.append(episode_row.total_reward)
+            if len(recent_rewards) > self.config.success_window:
+                recent_rewards.pop(0)
+            if len(recent_rewards) == self.config.success_window:
+                window_avg = sum(recent_rewards) / self.config.success_window
+                if window_avg > best_moving_avg:
+                    best_moving_avg = window_avg
+                    extra: dict[str, object] = {
+                        "moving_average_reward": window_avg,
+                        "window_size": self.config.success_window,
+                        "window_start": episode - self.config.success_window + 1,
+                        "window_end": episode,
+                    }
+                    self.checkpoint("best_moving_average", episode, extra)
+
             if episode % self.config.checkpoint_interval == 0:
                 self.checkpoint("periodic", episode)
             self.logger.info(
@@ -375,13 +393,20 @@ class TrainingEngine:
         """Store one immutable transition through the replay public interface."""
         self.replay_buffer.push(transition)
 
-    def checkpoint(self, kind: str, episode: int) -> None:
+    def checkpoint(
+        self,
+        kind: str,
+        episode: int,
+        extra_scheduler_state: dict[str, object] | None = None,
+    ) -> None:
         """Request a configured checkpoint from the injected persistence service."""
         if (
             self.execution_context is ExecutionContext.COLAB_FULL
             and self.checkpoint_callback is not None
         ):
-            self.checkpoint_callback(kind, episode, self._global_steps)
+            self.checkpoint_callback(
+                kind, episode, self._global_steps, extra_scheduler_state
+            )
 
     def finalize(self) -> None:
         """Place the agent in evaluation mode after orchestration ends."""

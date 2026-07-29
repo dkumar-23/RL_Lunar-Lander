@@ -1,0 +1,50 @@
+{
+  "run_id": "RUN-003",
+  "description": "Proposed RUN-003 with slower epsilon decay (0.9985 vs 0.9995) for extended exploration phase",
+  "status": "PROPOSED_NOT_AUTHORIZED",
+  "training_config": "experiments/run003/training.yaml",
+  "shared_training_controls": true,
+  "fairness_preflight_passed": true,
+  "experiments": {
+    "EXP-001": {
+      "configuration_path": "experiments/run003/exp001/config.yaml",
+      "algorithm": "DQN",
+      "environment_variant": "original",
+      "resolved_configuration_sha256": "2883d103d770347e73d0ef96122591e7b24333dbf93f99de815e0197d2a80d8a"
+    },
+    "EXP-002": {
+      "configuration_path": "experiments/run003/exp002/config.yaml",
+      "algorithm": "DQN",
+      "environment_variant": "modified",
+      "resolved_configuration_sha256": "0c4b6018308562cee6015602385972449e652a2bcbbd1ae4c5d4d2dff93b4094"
+    },
+    "EXP-003": {
+      "configuration_path": "experiments/run003/exp003/config.yaml",
+      "algorithm": "DDQN",
+      "environment_variant": "original",
+      "resolved_configuration_sha256": "14c28f189f8f5503d9c4af10aa710502b271ca64b079840bb810842359bdf24c"
+    },
+    "EXP-004": {
+      "configuration_path": "experiments/run003/exp004/config.yaml",
+      "algorithm": "DDQN",
+      "environment_variant": "modified",
+      "resolved_configuration_sha256": "e3c7337503072a3bdd31cc174227a92e6268341c941261a87d61794dead8dc0a"
+    }
+  },
+  "epsilon_schedule_formula": "step(): epsilon = max(epsilon_final, epsilon * epsilon_decay)",
+  "epsilon_at_episode": "max(epsilon_final, epsilon_initial * epsilon_decay^(N-1)) where N is 1-indexed episode",
+  "epsilon_values": {
+    "decay": 0.9985,
+    "initial": 1.0,
+    "final": 0.01,
+    "episode_0_start": 1.0,
+    "episode_1_start": 1.0,
+    "episode_500_start": 0.4728,
+    "episode_1000_start": 0.2232,
+    "episode_1500_start": 0.1054,
+    "episode_2000_start": 0.0497,
+    "floor_reached_within_2000": false
+  },
+  "diff_from_run_002": ["epsilon_decay: 0.9995 -> 0.9985"],
+  "comparison": "RUN-003 has substantially less residual exploration and more exploitation than RUN-002 at equivalent episodes, while retaining more exploration across 2000 episodes than the 1000-episode RUN-001."
+}

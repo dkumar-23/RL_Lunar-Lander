@@ -35,6 +35,7 @@ class TrainingSeries:
     rewards: tuple[float, ...]
     mean_predicted_q: tuple[float, ...]
     landing_success: tuple[float, ...]
+    selected_thruster_activations: tuple[float, ...]
     executed_thruster_activations: tuple[float, ...]
 
 
@@ -62,7 +63,7 @@ class VisualizationEngine:
         self._validator = validator
 
     def generate(self, bundles: Sequence[Path]) -> tuple[Path, ...]:
-        """Generate all configured formats for the four canonical plots."""
+        """Generate configured formats for four canonical and one supplementary plot."""
         series = self.load(bundles)
         specs = (
             (
@@ -87,9 +88,15 @@ class VisualizationEngine:
             ),
             (
                 "average_thruster_activations",
-                "Executed Thruster Activations per Training Episode",
-                "Executed Thruster Activations",
-                lambda item: item.executed_thruster_activations,
+                "Selected Thruster Activations per Training Episode",
+                "Selected Thruster Activations",
+                lambda item: item.selected_thruster_activations,
+            ),
+            (
+                "average_thruster_activations_selected_vs_executed",
+                "Selected vs Executed Thruster Activations per Training Episode",
+                "Thruster Activations",
+                None,
             ),
         )
         destinations = tuple(
@@ -116,19 +123,39 @@ class VisualizationEngine:
                 figure, axis = plt.subplots(
                     figsize=(self._config.width_inches, self._config.height_inches)
                 )
-                for index, item in enumerate(series):
-                    axis.plot(
-                        item.episodes,
-                        selector(item),
-                        color=_COLORS[index],
-                        linestyle=_LINE_STYLES[index],
-                        linewidth=1.4,
-                        label=item.label,
-                    )
+                if selector is not None:
+                    for index, item in enumerate(series):
+                        axis.plot(
+                            item.episodes,
+                            selector(item),
+                            color=_COLORS[index],
+                            linestyle=_LINE_STYLES[index],
+                            linewidth=1.4,
+                            label=item.label,
+                        )
+                else:
+                    for index, item in enumerate(series):
+                        axis.plot(
+                            item.episodes,
+                            item.selected_thruster_activations,
+                            color=_COLORS[index],
+                            linestyle="-",
+                            linewidth=1.4,
+                            label=f"{item.label} (selected)",
+                        )
+                        axis.plot(
+                            item.episodes,
+                            item.executed_thruster_activations,
+                            color=_COLORS[index],
+                            linestyle="--",
+                            linewidth=1.0,
+                            alpha=0.6,
+                            label=f"{item.label} (executed)",
+                        )
                 axis.set_title(title)
                 axis.set_xlabel("Training Episode")
                 axis.set_ylabel(ylabel)
-                axis.legend(frameon=False)
+                axis.legend(frameon=False, fontsize=8)
                 for file_format in self._config.formats:
                     destination = self._config.output_root / f"{filename}.{file_format}"
                     figure.savefig(
@@ -196,6 +223,7 @@ def _read_series(
         "episode",
         "total_reward",
         "landing_success",
+        "thruster_actions_selected",
         "thruster_actions_executed",
         "mean_predicted_q",
     }
@@ -218,10 +246,11 @@ def _read_series(
         rewards = tuple(float(row["total_reward"]) for row in rows)
         q_values = tuple(float(row["mean_predicted_q"]) for row in rows)
         success = tuple(_boolean(row["landing_success"]) for row in rows)
-        activations = tuple(float(row["thruster_actions_executed"]) for row in rows)
+        selected = tuple(float(row["thruster_actions_selected"]) for row in rows)
+        executed = tuple(float(row["thruster_actions_executed"]) for row in rows)
     except (TypeError, ValueError) as exc:
         raise VisualizationError(f"Invalid value in persisted metrics: {path}") from exc
-    numeric: Iterable[float] = (*rewards, *q_values, *success, *activations)
+    numeric: Iterable[float] = (*rewards, *q_values, *success, *selected, *executed)
     if episodes != tuple(sorted(set(episodes))) or episodes[0] < 1:
         raise VisualizationError("Episode identifiers must be unique and increasing.")
     if not all(math.isfinite(value) for value in numeric):
@@ -234,7 +263,8 @@ def _read_series(
         rewards,
         q_values,
         success,
-        activations,
+        selected,
+        executed,
     )
 
 

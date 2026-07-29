@@ -24,3 +24,6 @@ reports/generated/
 
 # Repository documentation remains local and is not committed.
 *.md
+
+# Assignment specification document
+Assignment*.docx

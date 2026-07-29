@@ -14,6 +14,13 @@ from .checkpoint import (
     load_checkpoint,
     save_checkpoint,
 )
+from .checkpoint_selection import (
+    CheckpointSelection,
+    CheckpointSelectionError,
+    Selector,
+    final_checkpoint,
+    moving_average_reward_checkpoint,
+)
 from .configuration import (
     ConfigurationError,
     ResolvedConfiguration,
@@ -51,4 +58,9 @@ __all__ = [
     "SoftwareMetadata",
     "capture_software_metadata",
     "initialize_seed",
+    "CheckpointSelection",
+    "CheckpointSelectionError",
+    "Selector",
+    "final_checkpoint",
+    "moving_average_reward_checkpoint",
 ]

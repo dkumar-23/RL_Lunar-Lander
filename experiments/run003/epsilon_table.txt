@@ -1,0 +1,26 @@
+Epsilon values for RUN-003 (epsilon_decay=0.9985, RUN-002: 0.9995)
+
+The scheduler implements multiplicative decay:
+  step(): epsilon = max(epsilon_final, epsilon * epsilon_decay)
+
+Applied once after each completed episode.
+
+At episode N (1-indexed) start, after N-1 step calls:
+  epsilon = max(epsilon_final, epsilon_initial * epsilon_decay^(N-1))
+
+          | RUN-002 epsilon  | RUN-003 epsilon
+  episode | (decay=0.9995)   | (decay=0.9985)
+  --------+------------------+-----------------
+        0 |       1.00000000 |       1.00000000
+        1 |       1.00000000 |       1.00000000
+      500 |       0.77914166 |       0.47280987
+     1000 |       0.60675820 |       0.22321385
+     1500 |       0.47251422 |       0.10537940
+     2000 |       0.36797144 |       0.04974969
+
+epsilon_final floor of 0.01 is not reached within 2000 episodes for either run.
+
+At episode 2000, RUN-003 has substantially less residual exploration
+(epsilon ~0.05) than RUN-002 (epsilon ~0.37). RUN-003 therefore provides
+more exploitation pressure late in training while still exploring more
+across 2000 episodes than the 1000-episode RUN-001.
