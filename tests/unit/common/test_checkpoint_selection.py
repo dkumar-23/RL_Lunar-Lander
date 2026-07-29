@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+import torch
 
 from src.common.checkpoint_selection import (
     CheckpointSelectionError,
@@ -32,6 +33,25 @@ def _episode_metrics(path: Path, rewards: list[float]) -> None:
     for index, reward in enumerate(rewards, start=1):
         lines.append(f"{index},{reward}")
     (path / "episode_metrics.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _best_moving_avg_checkpoint(path: Path, episode: int, global_step: int = 0) -> None:
+    payload = {
+        "model_state": {"dummy": torch.zeros(1)},
+        "target_state": {"dummy": torch.zeros(1)},
+        "optimizer_state": {"dummy": torch.zeros(1)},
+        "scheduler_state": None,
+        "metadata": {
+            "experiment_id": "EXP-001",
+            "run_id": "RUN-001",
+            "episode": episode,
+            "global_step": global_step,
+            "configuration_hash": "a" * 64,
+            "seed": 42,
+            "git_sha": "b" * 40,
+        },
+    }
+    torch.save(payload, path / "checkpoints" / "best_moving_average_checkpoint.pt")
 
 
 def test_final_checkpoint_selects_final_checkpoint_file(tmp_path: Path) -> None:
@@ -76,6 +96,31 @@ def test_moving_average_with_specific_checkpoint_file(tmp_path: Path) -> None:
 
     assert selection.checkpoint_name == "checkpoint_0200.pt"
     assert selection.episode == 200
+
+
+def test_moving_average_selects_best_moving_avg_checkpoint(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    _best_moving_avg_checkpoint(bundle, episode=150)
+    _episode_metrics(bundle, [float(i % 100) for i in range(300)])
+
+    selection = moving_average_reward_checkpoint(bundle, window=100)
+
+    assert selection.checkpoint_name == "best_moving_average_checkpoint.pt"
+    assert selection.episode == 150
+    assert selection.selection_criterion == "best_100_episode_moving_average_reward"
+
+
+def test_moving_average_selects_best_moving_avg_prefers_embedded_metadata(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(tmp_path)
+    _best_moving_avg_checkpoint(bundle, episode=50)
+    _episode_metrics(bundle, [0.0] * 100 + [100.0] * 100 + [0.0] * 100)
+
+    selection = moving_average_reward_checkpoint(bundle, window=100)
+
+    assert selection.checkpoint_name == "best_moving_average_checkpoint.pt"
+    assert selection.episode == 50
 
 
 def test_moving_average_fails_on_missing_metrics(tmp_path: Path) -> None:
