@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 from src.common.configuration import ConfigurationError, resolve_configuration
 from src.training.config import (
-    ExperimentConfig,
     load_experiment_config,
-    resolved_experiment_sha256,
     validate_registered_configuration,
 )
 

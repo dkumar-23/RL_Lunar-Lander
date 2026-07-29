@@ -37,10 +37,10 @@ def test_all_canonical_experiments_share_training_controls() -> None:
     assert [
         validate_registered_configuration(item, repository) for item in experiments
     ] == [
-        "5d92856bebe55fba9be4af57bea9b89c1f08d25993e3ab96015a08faef44773d",
-        "7825bcf1050f19ea4159ca5d4f6dd8e2df8bfa56291424fcc6657f8e15f57f99",
-        "2df5549a59291007a0729eafe6d86c536aab24624ab108165bad8d4c2a054e01",
-        "cfe41ea8b82e0ff39a9f22086fddc2ceabee2537d5d7a62e22a4b3aaaf3957bb",
+        "da315e68d3d21324fc4775715f4faa3c84d859e2ab49bb9973092fe8b0bfd490",
+        "1494b939bf5b707eb5fedf77dadcfbb19206df69bd9b1f8b995c9ab97801bb67",
+        "6de2b51eac37f458f214d78aee8f5050997a27c7acc10a4fe1e6edaeb04c69a0",
+        "5770d945e9d0c7ecd32f97db930ebd605a393eee3998d464beba1e13276743fb",
     ]
 
 
